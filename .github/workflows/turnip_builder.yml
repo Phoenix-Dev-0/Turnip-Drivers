@@ -1,0 +1,66 @@
+name: Build "turnip"
+
+on:
+  schedule:
+    - cron: "* * * * *"
+  workflow_dispatch:
+    inputs:
+      android:
+        description: 'Whether to trigger an Android build (true/false/auto)'
+        required: false
+        default: 'true'
+
+jobs:
+  start_building_turnip:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Prepare environment
+        run: |
+          sudo sed -Ei 's/^# deb-src /deb-src /' /etc/apt/sources.list
+          sudo apt update
+          sudo apt build-dep mesa -y
+
+      - name: Execute build script
+        run: bash ./turnip_builder.sh
+
+      - name: Upload build logs
+        uses: actions/upload-artifact@v3.1.0
+        with:
+          name: build-logs
+          path: |
+            turnip_workdir/ninja_log
+            turnip_workdir/mesa/build-android-aarch64/meson-logs/meson-log.txt
+
+      - id: versions
+        name: Get release info
+        run: |
+          echo "name=$(cat turnip_workdir/release)" >> $GITHUB_OUTPUT
+          echo "tag=$(cat turnip_workdir/tag)" >> $GITHUB_OUTPUT
+          echo "filename=$(cat turnip_workdir/filename)" >> $GITHUB_OUTPUT
+          echo "patched=$(cat turnip_workdir/patched)" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release with patched
+        if: ${{ steps.versions.outputs.patched == 'true' }}
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: turnip_workdir/description
+          name: ${{ steps.versions.outputs.name }}
+          tag_name: ${{ steps.versions.outputs.tag }}
+          files: |
+            turnip_workdir/${{ steps.versions.outputs.filename }}.zip
+            turnip_workdir/${{ steps.versions.outputs.filename }}_patched.zip
+
+      - name: Create GitHub Release without patched
+        if: ${{ steps.versions.outputs.patched == 'false' }}
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: turnip_workdir/description
+          name: ${{ steps.versions.outputs.name }}
+          tag_name: ${{ steps.versions.outputs.tag }}
+          files: turnip_workdir/${{ steps.versions.outputs.filename }}.zip
