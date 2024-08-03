@@ -1,5 +1,5 @@
 name: Build "turnip"
-
+            
 on:
   schedule:
     - cron: "0 3,6,9,12,15,18,21,0 * * *"
@@ -64,3 +64,13 @@ jobs:
           name: ${{ steps.versions.outputs.name }}
           tag_name: ${{ steps.versions.outputs.tag }}
           files: turnip_workdir/${{ steps.versions.outputs.filename }}.zip
+
+      - name: Notify Discord
+        if: ${{ always() }}
+        uses: sillyangel/releases-to-discord@v1
+        with:
+          webhook_url: ${{ secrets.WEBHOOK_URL }}
+          color: "2105893"
+          username: "Release Changelog"
+          avatar_url: "https://cdn.discordapp.com/avatars/487431320314576937/bd64361e4ba6313d561d54e78c9e7171.png"
+          content: "A new release has been created: ${{ steps.versions.outputs.name }} - ${{ github.event.release.html_url }}"
