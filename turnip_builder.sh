@@ -26,7 +26,6 @@ patches=(
 	"Dont-fast-clear-z-isNotEq-s;merge_requests/28249;"
  	"disable-gmem;commit/1ba6ccc51a4483a6d622c91fc43685150922dcdf;--reverse"
         "KHR_8bit_storage-support-fix-games-a7xx-break-some-a6xx;merge_requests/28254;"
- 	"disable-gmem;commit/1ba6ccc51a4483a6d622c91fc43685150922dcdf;--reverse"
 )
 #patches=()
 commit=""
