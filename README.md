@@ -36,7 +36,7 @@ Ensure the following dependencies are installed on your system:
 Clone the repository and navigate to the project directory:
 
 ```sh
-git clone https://github.com/yourusername/turnip-vulkan-build-script.git
+git clone https://github.com/Phoenix-Dev-0/Turnip-Drivers.git
 cd turnip-vulkan-build-script
 ```
 
