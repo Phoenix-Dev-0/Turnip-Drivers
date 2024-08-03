@@ -66,9 +66,9 @@ jobs:
           files: turnip_workdir/${{ steps.versions.outputs.filename }}.zip
 
       - name: Notify Discord
-        uses: sillyangel/releases-to-discord@v1
-        with:
-          webhook_url: ${{ secrets.WEBHOOK_URL }}
-          color: "2105893"
-          username: "Release Changelog"
-          avatar_url: "https://cdn.discordapp.com/avatars/487431320314576937/bd64361e4ba6313d561d54e78c9e7171.png"
+        run: |
+          curl -X POST -H "Content-Type: application/json" -d '{
+            "content": "A new release has been created: ${{ steps.versions.outputs.name }} - ${{ github.event.release.html_url }}",
+            "username": "Phoenix Drivers",
+            "avatar_url": "https://cdn.discordapp.com/avatars/487431320314576937/bd64361e4ba6313d561d54e78c9e7171.png"
+          }' ${{ secrets.WEBHOOK_URL }}
