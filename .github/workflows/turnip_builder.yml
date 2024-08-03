@@ -41,9 +41,11 @@ jobs:
         name: Get release info
         run: |
           echo "name=$(cat turnip_workdir/release)" >> $GITHUB_OUTPUT
-          echo "tag=$(cat turnip_workdir/tag)" >> $GITHUB_OUTPUT
           echo "filename=$(cat turnip_workdir/filename)" >> $GITHUB_OUTPUT
           echo "patched=$(cat turnip_workdir/patched)" >> $GITHUB_OUTPUT
+          # Generate a unique tag with a timestamp
+          timestamp=$(date +'%Y%m%d%H%M%S')
+          echo "tag=$(cat turnip_workdir/tag)-${timestamp}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release with patched
         if: ${{ steps.versions.outputs.patched == 'true' }}
@@ -68,7 +70,7 @@ jobs:
       - name: Notify Discord
         run: |
           curl -X POST -H "Content-Type: application/json" -d '{
-            "content": "A new release has been created: ${{ steps.versions.outputs.name }} - ${{ github.event.release.html_url }}",
+            "content": "A new release has been created: **${{ steps.versions.outputs.name }}** - [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.versions.outputs.tag }})",
             "username": "Phoenix Drivers",
             "avatar_url": "https://cdn.discordapp.com/avatars/487431320314576937/bd64361e4ba6313d561d54e78c9e7171.png"
           }' ${{ secrets.WEBHOOK_URL }}
