@@ -377,7 +377,7 @@ port_lib_for_adrenotool(){
 	cat <<EOF >"meta.json"
 {
   "schemaVersion": 1,
-  "name": "Turnip - $date - $commit_short$patched",
+  "name": "Phoenix - $date - $commit_short$patched",
   "description": "Compiled from Mesa, Commit $commit_short$patched",
   "author": "mesa",
   "packageVersion": "1",
@@ -388,7 +388,7 @@ port_lib_for_adrenotool(){
 }
 EOF
 
-	filename=turnip_"$(date +'%b-%d-%Y')"_"$commit_short"
+	filename=phoenix_"$(date +'%b-%d-%Y')"_"$commit_short"
 	echo "Copy necessary files from work directory ..." $'\n'
 	cp "$workdir"/vulkan.ad06XX.so "$packagedir"
 
@@ -397,7 +397,7 @@ EOF
 
 	cd "$workdir"
 	
-	echo "Turnip - $mesa_version - $date" > release
+	echo "Phoenix - $mesa_version - $date" > release
 	echo "$mesa_version"_"$commit_short" > tag
 	echo  $filename > filename
 	echo "### Base commit : [$commit_short](https://gitlab.freedesktop.org/mesa/mesa/-/commit/$commit_short)" > description
