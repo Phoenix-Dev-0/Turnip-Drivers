@@ -37,7 +37,7 @@ Clone the repository and navigate to the project directory:
 
 ```sh
 git clone https://github.com/Phoenix-Dev-0/Turnip-Drivers.git
-cd turnip-vulkan-build-script
+cd Turnip-Drivers
 ```
 
 ## Usage
