@@ -70,7 +70,7 @@ jobs:
       - name: Notify Discord
         run: |
           curl -X POST -H "Content-Type: application/json" -d '{
-            "content": "A Turnip Driver Has Dropped (Mesa 24.2): **${{ steps.versions.outputs.name }}** - [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.versions.outputs.tag }})",
+            "content": "A Turnip Driver Has Dropped: **${{ steps.versions.outputs.name }}** - [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.versions.outputs.tag }})",
             "username": "Phoenix Drivers",
             "avatar_url": "https://i.imgur.com/4Pu1FyI.png"
           }' ${{ secrets.WEBHOOK_URL }}
