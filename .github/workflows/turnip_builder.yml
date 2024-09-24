@@ -20,16 +20,40 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      - name: Get current commit SHA
+        id: current_commit
+        run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Get last release commit SHA
+        id: last_release_commit
+        run: |
+          # Fetch the tag of the latest release and extract the commit SHA
+          latest_commit=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.target_commitish')
+          echo "last_sha=${latest_commit}" >> $GITHUB_OUTPUT
+
+      - name: Check if a new release is needed
+        id: release_check
+        run: |
+          if [ "${{ steps.current_commit.outputs.sha }}" = "${{ steps.last_release_commit.outputs.last_sha }}" ]; then
+            echo "Release not needed: Current commit matches the last release commit."
+            exit 0
+          else
+            echo "Release needed: Current commit is different from the last release commit."
+          fi
+
       - name: Prepare environment
+        if: ${{ steps.release_check.outcome == 'success' }}
         run: |
           sudo sed -Ei 's/^# deb-src /deb-src /' /etc/apt/sources.list
           sudo apt update
           sudo apt build-dep mesa -y
 
       - name: Execute build script
+        if: ${{ steps.release_check.outcome == 'success' }}
         run: bash ./turnip_builder.sh
 
       - name: Upload build logs
+        if: ${{ steps.release_check.outcome == 'success' }}
         uses: actions/upload-artifact@v3.1.0
         with:
           name: build-logs
@@ -39,16 +63,16 @@ jobs:
 
       - id: versions
         name: Get release info
+        if: ${{ steps.release_check.outcome == 'success' }}
         run: |
           echo "name=$(cat turnip_workdir/release)" >> $GITHUB_OUTPUT
           echo "filename=$(cat turnip_workdir/filename)" >> $GITHUB_OUTPUT
           echo "patched=$(cat turnip_workdir/patched)" >> $GITHUB_OUTPUT
-          # Generate a unique tag with a timestamp
           timestamp=$(date +'%Y%m%d%H%M%S')
           echo "tag=$(cat turnip_workdir/tag)-${timestamp}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release with patched
-        if: ${{ steps.versions.outputs.patched == 'true' }}
+        if: ${{ steps.versions.outputs.patched == 'true' && steps.release_check.outcome == 'success' }}
         uses: softprops/action-gh-release@v1
         with:
           body_path: turnip_workdir/description
@@ -59,7 +83,7 @@ jobs:
             turnip_workdir/${{ steps.versions.outputs.filename }}_patched.zip
 
       - name: Create GitHub Release without patched
-        if: ${{ steps.versions.outputs.patched == 'false' }}
+        if: ${{ steps.versions.outputs.patched == 'false' && steps.release_check.outcome == 'success' }}
         uses: softprops/action-gh-release@v1
         with:
           body_path: turnip_workdir/description
@@ -68,9 +92,10 @@ jobs:
           files: turnip_workdir/${{ steps.versions.outputs.filename }}.zip
 
       - name: Notify Discord
+        if: ${{ steps.release_check.outcome == 'success' }}
         run: |
           curl -X POST -H "Content-Type: application/json" -d '{
             "content": "A Turnip Driver Has Dropped: **${{ steps.versions.outputs.name }}** - [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.versions.outputs.tag }})",
-            "username": "Phoenix Drivers",
+            "username": "Turnip Drivers",
             "avatar_url": "https://i.imgur.com/4Pu1FyI.png"
           }' ${{ secrets.WEBHOOK_URL }}
