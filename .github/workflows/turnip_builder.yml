@@ -27,8 +27,7 @@ jobs:
       - name: Get last release commit SHA
         id: last_release_commit
         run: |
-          # Fetch the tag of the latest release and extract the commit SHA
-          latest_commit=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.target_commitish')
+          latest_commit=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.target_commitish // "null"')
           echo "last_sha=${latest_commit}" >> $GITHUB_OUTPUT
 
       - name: Check if a new release is needed
@@ -68,11 +67,12 @@ jobs:
           echo "name=$(cat turnip_workdir/release)" >> $GITHUB_OUTPUT
           echo "filename=$(cat turnip_workdir/filename)" >> $GITHUB_OUTPUT
           echo "patched=$(cat turnip_workdir/patched)" >> $GITHUB_OUTPUT
+          echo "experimental=$(cat turnip_workdir/experimental)" >> $GITHUB_OUTPUT
           timestamp=$(date +'%Y%m%d%H%M%S')
           echo "tag=$(cat turnip_workdir/tag)-${timestamp}" >> $GITHUB_OUTPUT
 
-      - name: Create GitHub Release with patched
-        if: ${{ steps.versions.outputs.patched == 'true' && steps.release_check.outcome == 'success' }}
+      - name: Create GitHub Release with patched and experimental builds
+        if: ${{ steps.versions.outputs.patched == 'true' || steps.versions.outputs.experimental == 'true' && steps.release_check.outcome == 'success' }}
         uses: softprops/action-gh-release@v1
         with:
           body_path: turnip_workdir/description
@@ -81,9 +81,10 @@ jobs:
           files: |
             turnip_workdir/${{ steps.versions.outputs.filename }}.zip
             turnip_workdir/${{ steps.versions.outputs.filename }}_patched.zip
+            turnip_workdir/${{ steps.versions.outputs.filename }}_experimental.zip
 
-      - name: Create GitHub Release without patched
-        if: ${{ steps.versions.outputs.patched == 'false' && steps.release_check.outcome == 'success' }}
+      - name: Create GitHub Release without patched or experimental
+        if: ${{ steps.versions.outputs.patched == 'false' && steps.versions.outputs.experimental == 'false' && steps.release_check.outcome == 'success' }}
         uses: softprops/action-gh-release@v1
         with:
           body_path: turnip_workdir/description
@@ -95,7 +96,7 @@ jobs:
         if: ${{ steps.release_check.outcome == 'success' }}
         run: |
           curl -X POST -H "Content-Type: application/json" -d '{
-            "content": "A Turnip Driver Has Dropped: **${{ steps.versions.outputs.name }}** - [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.versions.outputs.tag }})",
-            "username": "Turnip Drivers",
+            "content": "A Phoenix Driver Has Dropped: **${{ steps.versions.outputs.name }}** - [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.versions.outputs.tag }})",
+            "username": "Phoenix Drivers",
             "avatar_url": "https://i.imgur.com/4Pu1FyI.png"
           }' ${{ secrets.WEBHOOK_URL }}
