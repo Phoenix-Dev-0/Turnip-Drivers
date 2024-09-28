@@ -93,10 +93,6 @@ Contributions are welcome! Please open an issue or submit a pull request for any
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-Here’s an updated version of the **Acknowledgements** section to include the additional credits:
-
----
-
 ## Acknowledgements
 
 - [Mesa 3D Graphics Library](https://mesa3d.org/)
