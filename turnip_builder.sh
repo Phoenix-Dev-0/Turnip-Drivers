@@ -11,21 +11,7 @@ sdkver="34"
 mesasrc="https://gitlab.freedesktop.org/mesa/mesa.git"
 
 #array of string => commit/branch;patch args
-patches=(	
-	"visual-fix-issues-in-some-games-1;merge_requests/27986;--reverse"
-	"visual-fix-issues-in-some-games-2;commit/9de628b65ca36b920dc6181251b33c436cad1b68;--reverse"
-        "visual-fix-issues-in-some-game-3;merge_requests/28148;--reverse"
-	"8gen3-fix;merge_requests/27912;--reverse"
-	"mem-leaks-tu-shader;merge_requests/27847;--reverse"
-        "add-RMV-Support;commit/a13860e5dfd0cf28ff5292b410d5be44791ca7cc;--reverse"
-	"fix-color-buffer;commit/782fb8966bd59a40b905b17804c493a76fdea7a0;--reverse"
-        "Fix-undefined-value-gl_ClipDistance;merge_requests/28109;--reverse"
-	"tweak-attachment-validation;merge_requests/28135;--reverse"
-	"Fix-undefined-value-gl_ClipDistance;merge_requests/28109;"
-	"Add-PC_TESS_PARAM_SIZE-PC_TESS_FACTOR_SIZE;merge_requests/28210;"
-	"Dont-fast-clear-z-isNotEq-s;merge_requests/28249;"
- 	"disable-gmem;commit/1ba6ccc51a4483a6d622c91fc43685150922dcdf;--reverse"
-        "KHR_8bit_storage-support-fix-games-a7xx-break-some-a6xx;merge_requests/28254"
+patches=(
 	"Fix-Adreno-735;/merge_requests/30379;"
 )
 #patches=()
