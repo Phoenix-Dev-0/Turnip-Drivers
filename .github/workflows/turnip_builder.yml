@@ -1,102 +1,79 @@
-name: Build and Release Turnip
+name: Build "turnip"
 
 on:
-  schedule:
-    - cron: "0 3,6,9,12,15,18,21,0 * * *"
-  workflow_dispatch:
-    inputs:
-      android:
-        description: 'Whether to trigger an Android build (true/false/auto)'
-        required: false
-        default: 'true'
+  workflow_dispatch:  # Allows for manual triggering
+  schedule:           # Automatic scheduled trigger
+  # Daily at 10 AM GMT+10 and 5 PM GMT+10
+  - cron: "0 0 * * *"  # This runs at 10 AM GMT+10 (which is 00:00 UTC on the same day)
+  - cron: "0 7 * * *"   # This runs at 5 PM GMT+10 (which is 07:00 UTC on the same day)
 
 jobs:
   start_building_turnip:
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+    - uses: actions/checkout@v3  # Checkout repository code
 
-      - name: Get current commit SHA
-        id: current_commit
-        run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+    - name: Prepare environment  # Prepare system for building Mesa
+      run: |
+        sudo sed -Ei 's/^# deb-src /deb-src /' /etc/apt/sources.list  # Enable deb-src for source packages
+        sudo apt update  # Update package list
+        sudo apt build-dep mesa -y  # Install build dependencies for Mesa
+    
+    - name: Execute build script  # Run custom build script
+      run: bash ./turnip_builder.sh
 
-      - name: Get last release commit SHA
-        id: last_release_commit
-        run: |
-          latest_commit=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.target_commitish // "null"')
-          echo "last_sha=${latest_commit}" >> $GITHUB_OUTPUT
+    - name: Upload Build Artifact  # Upload build logs for debugging
+      uses: actions/upload-artifact@v3.1.0
+      with:
+        name: Build Logs
+        path: |
+          turnip_workdir/ninja_log
+          turnip_workdir/mesa/build-android-aarch64/meson-logs/meson-log.txt
+    
+    - id: versions
+      name: "Get release info"  # Collect version and release information for the build
+      run: |
+        echo "name=$(cat turnip_workdir/release)" >> "$GITHUB_OUTPUT"
+        echo "tag=$(cat turnip_workdir/tag)" >> "$GITHUB_OUTPUT"
+        echo "filename=$(cat turnip_workdir/filename)" >> "$GITHUB_OUTPUT"
+        echo "patched=$(cat turnip_workdir/patched)" >> "$GITHUB_OUTPUT"
+        echo "experimental=$(cat turnip_workdir/experimental)" >> "$GITHUB_OUTPUT"
 
-      - name: Check if a new release is needed
-        id: release_check
-        run: |
-          if [ "${{ steps.current_commit.outputs.sha }}" = "${{ steps.last_release_commit.outputs.last_sha }}" ]; then
-            echo "Release not needed: Current commit matches the last release commit."
-            exit 0
-          else
-            echo "Release needed: Current commit is different from the last release commit."
-          fi
+    - id: release_check
+      name: Release "turnip" (Base Version)  # Create a release for the base build
+      uses: softprops/action-gh-release@v1
+      with:
+        body_path: turnip_workdir/description  # Description for the release
+        name: ${{ steps.versions.outputs.name }}  # Release name
+        tag_name: ${{ steps.versions.outputs.tag }}  # Git tag
+        files: |
+           turnip_workdir/${{ steps.versions.outputs.filename }}.zip  # Main zip file
 
-      - name: Prepare environment
-        if: ${{ steps.release_check.outcome == 'success' }}
-        run: |
-          sudo sed -Ei 's/^# deb-src /deb-src /' /etc/apt/sources.list
-          sudo apt update
-          sudo apt build-dep mesa -y
+    - name: Release "turnip" with Experimental  # Release for experimental build (if applicable)
+      if: ${{ contains(steps.versions.outputs.experimental, 'true') }}  # Conditional release if experimental patches exist
+      uses: softprops/action-gh-release@v1
+      with:
+        body_path: turnip_workdir/description  # Description for the release
+        name: ${{ steps.versions.outputs.name }}  # Release name
+        tag_name: ${{ steps.versions.outputs.tag }}  # Git tag
+        files: |
+           turnip_workdir/${{ steps.versions.outputs.filename }}_experimental.zip  # Experimental build zip
 
-      - name: Execute build script
-        if: ${{ steps.release_check.outcome == 'success' }}
-        run: bash ./turnip_builder.sh
+    - name: Release "turnip" with Patched  # Release for patched build (if applicable)
+      if: ${{ contains(steps.versions.outputs.patched, 'true') }}  # Conditional release if patched version exists
+      uses: softprops/action-gh-release@v1
+      with:
+        body_path: turnip_workdir/description  # Description for the release
+        name: ${{ steps.versions.outputs.name }}  # Release name
+        tag_name: ${{ steps.versions.outputs.tag }}  # Git tag
+        files: |
+           turnip_workdir/${{ steps.versions.outputs.filename }}_patched.zip  # Patched build zip
 
-      - name: Upload build logs
-        if: ${{ steps.release_check.outcome == 'success' }}
-        uses: actions/upload-artifact@v3.1.0
-        with:
-          name: build-logs
-          path: |
-            turnip_workdir/ninja_log
-            turnip_workdir/mesa/build-android-aarch64/meson-logs/meson-log.txt
-
-      - id: versions
-        name: Get release info
-        if: ${{ steps.release_check.outcome == 'success' }}
-        run: |
-          echo "name=$(cat turnip_workdir/release)" >> $GITHUB_OUTPUT
-          echo "filename=$(cat turnip_workdir/filename)" >> $GITHUB_OUTPUT
-          echo "patched=$(cat turnip_workdir/patched)" >> $GITHUB_OUTPUT
-          echo "experimental=$(cat turnip_workdir/experimental)" >> $GITHUB_OUTPUT
-          timestamp=$(date +'%Y%m%d%H%M%S')
-          echo "tag=$(cat turnip_workdir/tag)-${timestamp}" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release with patched and experimental builds
-        if: ${{ steps.versions.outputs.patched == 'true' || steps.versions.outputs.experimental == 'true' && steps.release_check.outcome == 'success' }}
-        uses: softprops/action-gh-release@v1
-        with:
-          body_path: turnip_workdir/description
-          name: ${{ steps.versions.outputs.name }}
-          tag_name: ${{ steps.versions.outputs.tag }}
-          files: |
-            turnip_workdir/${{ steps.versions.outputs.filename }}.zip
-            turnip_workdir/${{ steps.versions.outputs.filename }}_patched.zip
-            turnip_workdir/${{ steps.versions.outputs.filename }}_experimental.zip
-
-      - name: Create GitHub Release without patched or experimental
-        if: ${{ steps.versions.outputs.patched == 'false' && steps.versions.outputs.experimental == 'false' && steps.release_check.outcome == 'success' }}
-        uses: softprops/action-gh-release@v1
-        with:
-          body_path: turnip_workdir/description
-          name: ${{ steps.versions.outputs.name }}
-          tag_name: ${{ steps.versions.outputs.tag }}
-          files: turnip_workdir/${{ steps.versions.outputs.filename }}.zip
-
-      - name: Notify Discord
-        if: ${{ steps.release_check.outcome == 'success' }}
-        run: |
-          curl -X POST -H "Content-Type: application/json" -d '{
-            "content": "A Phoenix Driver Has Dropped: **${{ steps.versions.outputs.name }}** - [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.versions.outputs.tag }})",
-            "username": "Phoenix Drivers",
-            "avatar_url": "https://i.imgur.com/4Pu1FyI.png"
-          }' ${{ secrets.WEBHOOK_URL }}
+    - name: Notify Discord  # Notify Discord if release is successful
+      if: ${{ steps.release_check.outcome == 'success' }}  # Only run if release succeeded
+      run: |
+        curl -X POST -H "Content-Type: application/json" -d '{
+          "content": "A Turnip Driver Has Dropped: **${{ steps.versions.outputs.name }}** - [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.versions.outputs.tag }})",
+          "username": "Turnip Drivers",
+          "avatar_url": "https://i.imgur.com/4Pu1FyI.png"
+        }' ${{ secrets.WEBHOOK_URL }}  # Webhook URL stored in GitHub Secrets
