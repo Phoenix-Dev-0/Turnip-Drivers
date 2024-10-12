@@ -1,5 +1,8 @@
 name: Build "turnip"
 
+permissions:
+  contents: write  # Grant write access to push the tag
+
 on:
   workflow_dispatch:
   schedule:
