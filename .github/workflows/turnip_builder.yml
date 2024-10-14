@@ -1,4 +1,4 @@
-name: Build "turnip"
+name: Build Turnip Driver
 
 permissions:
   contents: write  # Grant write access to push the tag
@@ -7,10 +7,9 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "0 0 * * *"
-    - cron: "0 7 * * *"
 
 jobs:
-  start_building_turnip:
+  build_turnip_driver:
     runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v3
@@ -40,7 +39,6 @@ jobs:
         echo "patched=$(cat turnip_workdir/patched)" >> "$GITHUB_OUTPUT"
         echo "experimental=$(cat turnip_workdir/experimental)" >> "$GITHUB_OUTPUT"
         
-        # Create unique tag using date, time, and short commit hash
         UNIQUE_TAG="turnip-$(date +'%Y%m%d-%H%M')-$(git rev-parse --short HEAD)"
         echo "tag=$UNIQUE_TAG" >> "$GITHUB_OUTPUT"
 
@@ -51,8 +49,7 @@ jobs:
         git tag -a ${{ steps.versions.outputs.tag }} -m "Release ${{ steps.versions.outputs.tag }}"
         git push origin ${{ steps.versions.outputs.tag }}
 
-    - id: release_check
-      name: Release "turnip" (Base Version)
+    - name: Release Turnip Driver
       uses: softprops/action-gh-release@v1
       with:
         body_path: turnip_workdir/description
@@ -60,26 +57,8 @@ jobs:
         tag_name: ${{ steps.versions.outputs.tag }}
         files: ${{ github.workspace }}/turnip_workdir/${{ steps.versions.outputs.filename }}.zip
 
-    - name: Release "turnip" with Experimental
-      if: ${{ contains(steps.versions.outputs.experimental, 'true') }}
-      uses: softprops/action-gh-release@v1
-      with:
-        body_path: turnip_workdir/description
-        name: ${{ steps.versions.outputs.name }}
-        tag_name: ${{ steps.versions.outputs.tag }}
-        files: ${{ github.workspace }}/turnip_workdir/${{ steps.versions.outputs.filename }}_experimental.zip
-
-    - name: Release "turnip" with Patched
-      if: ${{ contains(steps.versions.outputs.patched, 'true') }}
-      uses: softprops/action-gh-release@v1
-      with:
-        body_path: turnip_workdir/description
-        name: ${{ steps.versions.outputs.name }}
-        tag_name: ${{ steps.versions.outputs.tag }}
-        files: ${{ github.workspace }}/turnip_workdir/${{ steps.versions.outputs.filename }}_patched.zip
-
     - name: Notify Discord
-      if: ${{ steps.release_check.outcome == 'success' }}
+      if: ${{ steps.release_turnip_driver.outcome == 'success' }}
       run: |
         curl -X POST -H "Content-Type: application/json" -d '{
           "content": "A Turnip Driver Has Dropped: **${{ steps.versions.outputs.name }}** - [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.versions.outputs.tag }})",
