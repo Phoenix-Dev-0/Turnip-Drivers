@@ -58,8 +58,7 @@ jobs:
         body_path: turnip_workdir/description
         name: ${{ steps.versions.outputs.name }}
         tag_name: ${{ steps.versions.outputs.tag }}
-        files: |
-           turnip_workdir/${{ steps.versions.outputs.filename }}.zip
+        files: ${{ github.workspace }}/turnip_workdir/${{ steps.versions.outputs.filename }}.zip
 
     - name: Release "turnip" with Experimental
       if: ${{ contains(steps.versions.outputs.experimental, 'true') }}
@@ -68,8 +67,7 @@ jobs:
         body_path: turnip_workdir/description
         name: ${{ steps.versions.outputs.name }}
         tag_name: ${{ steps.versions.outputs.tag }}
-        files: |
-           turnip_workdir/${{ steps.versions.outputs.filename }}_experimental.zip
+        files: ${{ github.workspace }}/turnip_workdir/${{ steps.versions.outputs.filename }}_experimental.zip
 
     - name: Release "turnip" with Patched
       if: ${{ contains(steps.versions.outputs.patched, 'true') }}
@@ -78,8 +76,7 @@ jobs:
         body_path: turnip_workdir/description
         name: ${{ steps.versions.outputs.name }}
         tag_name: ${{ steps.versions.outputs.tag }}
-        files: |
-           turnip_workdir/${{ steps.versions.outputs.filename }}_patched.zip
+        files: ${{ github.workspace }}/turnip_workdir/${{ steps.versions.outputs.filename }}_patched.zip
 
     - name: Notify Discord
       if: ${{ steps.release_check.outcome == 'success' }}
