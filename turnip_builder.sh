@@ -186,6 +186,12 @@ port_lib_for_adrenotool() {
         suffix="_$1"
     fi
 
+    # Ensure description file is created
+    if [ ! -f "$workdir/description" ]; then
+        echo "Description file not found, creating an empty description."
+        touch "$workdir/description"
+    fi
+
     cat <<EOF >"meta.json"
 {
   "schemaVersion": 1,
@@ -207,12 +213,18 @@ EOF
     echo "Packing files into a zip..." $'\n'
     zip -9 "$workdir"/"$filename$suffix".zip ./*
 
+    # Ensure the zip file exists
+    if [ ! -f "$workdir/$filename$suffix.zip" ]; then
+        echo "ZIP file not created, build might have failed."
+        exit 1
+    fi
+
     if (( ${#failed_patches[@]} )); then
         echo "#### Failed patches" >> description
         patch_to_description "${failed_patches[@]}"
     fi
 
-    if ! [ -a "$workdir"/"$filename".zip ]; then
+    if ! [ -a "$workdir/$filename.zip" ]; then
         echo -e "$red-Packing failed!$nocolor" && exit 1
     else
         echo -e "$green-All done!$nocolor"
