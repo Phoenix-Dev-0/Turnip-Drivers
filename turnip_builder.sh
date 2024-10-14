@@ -186,10 +186,9 @@ port_lib_for_adrenotool() {
         suffix="_$1"
     fi
 
-    # Ensure description file is created
     if [ ! -f "$workdir/description" ]; then
-        echo "Description file not found, creating an empty description."
-        touch "$workdir/description"
+        echo "Creating a default description."
+        echo "Turnip Driver Built on $date from Commit $commit_short$suffix" > "$workdir/description"
     fi
 
     cat <<EOF >"meta.json"
@@ -213,7 +212,6 @@ EOF
     echo "Packing files into a zip..." $'\n'
     zip -9 "$workdir"/"$filename$suffix".zip ./*
 
-    # Ensure the zip file exists
     if [ ! -f "$workdir/$filename$suffix.zip" ]; then
         echo "ZIP file not created, build might have failed."
         exit 1
