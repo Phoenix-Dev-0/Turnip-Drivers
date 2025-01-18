@@ -90,9 +90,8 @@ prepare_workdir(){
 		fi
 		
 		echo "Cloning mesa ..." $'\n'
-		git clone --depth=1 --branch "25.0" "$mesasrc" mesa &> /dev/null
-
-		cd mesa
+		git clone https://gitlab.freedesktop.org/mesa/mesa.git mesa || exit 1
+		cd mesa || exit 1
 		commit_short=$(git rev-parse --short HEAD)
 		commit=$(git rev-parse HEAD)
 		mesa_version=$(cat VERSION | xargs)
