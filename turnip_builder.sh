@@ -65,6 +65,10 @@ check_deps(){
 
 	echo "Installing python Mako dependency (if missing) ..." $'\n'
 	pip install mako &> /dev/null
+
+	# Install Python dependencies
+	python -m pip install --upgrade pip
+	pip install meson mako PyYAML
 }
 
 prepare_workdir(){
