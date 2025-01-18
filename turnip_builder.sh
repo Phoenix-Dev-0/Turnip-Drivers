@@ -10,25 +10,26 @@ ndkver="android-ndk-r28"
 sdkver="35"
 mesasrc="https://gitlab.freedesktop.org/mesa/mesa.git"
 
-#array of string => commit/branch;patch args
+# Updated patches array with current versions and proper ordering
 patches=(
+	# Core functionality patches
+	"disable-gmem;commit/1ba6ccc51a4483a6d622c91fc43685150922dcdf;--reverse"
 	"fix-color-buffer;commit/782fb8966bd59a40b905b17804c493a76fdea7a0;--reverse"
+	
+	# Feature patches - applied after core patches
 	"Fix-undefined-value-gl_ClipDistance;merge_requests/28109;--reverse"
 	"tweak-attachment-validation;merge_requests/28135;--reverse"
 	"Add-PC_TESS_PARAM_SIZE-PC_TESS_FACTOR_SIZE;merge_requests/28210;"
 	"Dont-fast-clear-z-isNotEq-s;merge_requests/28249;"
-	"disable-gmem;commit/1ba6ccc51a4483a6d622c91fc43685150922dcdf;--reverse"
 	"KHR_8bit_storage-support-fix-games-a7xx-break-some-a6xx;merge_requests/28254;"
 )
-#patches=()
+
 commit=""
 commit_short=""
 mesa_version=""
 vulkan_version=""
 clear
 
-# there are 4 functions here, simply comment to disable.
-# you can insert your own function and make a pull request.
 run_all(){
 	check_deps
 	prepare_workdir
@@ -40,7 +41,6 @@ run_all(){
 		build_lib_for_android
 		port_lib_for_adrenotool "patched"
 	fi
-
 }
 
 check_deps(){
@@ -68,75 +68,63 @@ check_deps(){
 }
 
 prepare_workdir(){
+	local suffix=$1
 	echo "Creating and entering to work directory ..." $'\n'
 	mkdir -p "$workdir" && cd "$_"
 
-	if [ -z "${ANDROID_NDK_LATEST_HOME}" ]; then
+	if [ -z "${ANDROID_NDK_ROOT}" ]; then
 		if [ ! -n "$(ls -d android-ndk*)" ]; then
 			echo "Downloading android-ndk from google server (~640 MB) ..." $'\n'
 			curl https://dl.google.com/android/repository/"$ndkver"-linux.zip --output "$ndkver"-linux.zip &> /dev/null
-			###
-			echo "Exracting android-ndk to a folder ..." $'\n'
+			echo "Extracting android-ndk to a folder ..." $'\n'
 			unzip "$ndkver"-linux.zip  &> /dev/null
 		fi
-	else	
-		echo "Using android ndk from github image"
+		export ANDROID_NDK_ROOT="$workdir/$ndkver"
 	fi
 
-	if [ -z "$1" ]; then
-		if [ -d mesa ]; then
-			echo "Removing old mesa ..." $'\n'
-			rm -rf mesa
-		fi
-		
-		echo "Cloning mesa ..." $'\n'
-		git clone https://gitlab.freedesktop.org/mesa/mesa.git mesa || exit 1
-		cd mesa || exit 1
-		commit_short=$(git rev-parse --short HEAD)
-		commit=$(git rev-parse HEAD)
-		mesa_version=$(cat VERSION | xargs)
-		version=$(awk -F'COMPLETE VK_MAKE_API_VERSION(|)' '{print $2}' <<< $(cat include/vulkan/vulkan_core.h) | xargs)
-		major=$(echo $version | cut -d "," -f 2 | xargs)
-		minor=$(echo $version | cut -d "," -f 3 | xargs)
-		patch=$(awk -F'VK_HEADER_VERSION |\n#define' '{print $2}' <<< $(cat include/vulkan/vulkan_core.h) | xargs)
-		vulkan_version="$major.$minor.$patch"
-	else		
-		if [ -z ${experimental_patches+x} ]; then
-			echo "No experimental patches found"; 
-		else 
-			patches=("${experimental_patches[@]}" "${patches[@]}")
-		fi
+	if [ ! -d "mesa" ]; then
+		echo "Cloning mesa repository ..." $'\n'
+		git clone $mesasrc &> /dev/null
+	fi
 
-		cd mesa
-		for patch in ${patches[@]}; do
-			echo "Applying patch $patch"
-			patch_source="$(echo $patch | cut -d ";" -f 2 | xargs)"
-			patch_file="${patch_source#*\/}"
-			patch_args=$(echo $patch | cut -d ";" -f 3 | xargs)
-			curl --output "$patch_file".patch -k --retry 5  https://gitlab.freedesktop.org/mesa/mesa/-/"$patch_source".patch
-		
-			git apply $patch_args "$patch_file".patch
+	cd mesa
+	git reset --hard HEAD &> /dev/null
+	git clean -f -d &> /dev/null
+
+	if [ -z "$commit" ]; then
+		echo "Getting latest mesa version ..." $'\n'
+		git pull &> /dev/null
+		commit=$(git rev-parse HEAD)
+	else
+		echo "Checking out specified commit ..." $'\n'
+		git checkout $commit &> /dev/null
+	fi
+
+	commit_short=$(git rev-parse --short HEAD)
+	mesa_version=$(cat VERSION)
+	vulkan_version=$(cat src/vulkan/runtime/vk_common_entrypoints.h | grep -oP "(?<=VK_VERSION_).*(?=_MAJOR)" | head -1)
+
+	if (( ${#patches[@]} )); then
+		echo "No experimental patches found"
+		for patch in "${patches[@]}"; do
+			IFS=';' read -r name path reverse <<< "$patch"
+			echo "Applying patch $name;$path;$reverse"
+			curl -L "$mesasrc/-/raw/$path" | git apply $reverse -
 		done
 	fi
 }
 
 build_lib_for_android(){
-	echo "Creating meson cross file ..." $'\n'
-	if [ -z "${ANDROID_NDK_LATEST_HOME}" ]; then
-		ndk="$workdir/$ndkver/toolchains/llvm/prebuilt/linux-x86_64/bin"
-	else	
-		ndk="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-	fi
-
-	cat <<EOF >"android-aarch64"
+	echo -e "Creating meson cross file ... \n"
+	cat > android-aarch64 << EOF
 [binaries]
-ar = '$ndk/llvm-ar'
-c = ['ccache', '$ndk/aarch64-linux-android$sdkver-clang']
-cpp = ['ccache', '$ndk/aarch64-linux-android$sdkver-clang++', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
+ar = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+c = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android$sdkver-clang']
+cpp = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android$sdkver-clang++']
 c_ld = 'lld'
 cpp_ld = 'lld'
-strip = '$ndk/aarch64-linux-android-strip'
-pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=NDKDIR/pkgconfig', '/usr/bin/pkg-config']
+strip = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=$ANDROID_NDK_ROOT/pkgconfig', '/usr/bin/pkg-config']
 [host_machine]
 system = 'android'
 cpu_family = 'aarch64'
@@ -144,195 +132,7 @@ cpu = 'armv8'
 endian = 'little'
 EOF
 
-        cat <<EOF >"android-arm32"
-[binaries]
-ar = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-c = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang', '-O3', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fPIC']
-cpp = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++', '-O3', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fPIC', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
-c_ld = 'lld'
-cpp_ld = 'lld'
-strip = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-# Android doesn't come with a pkg-config, but we need one for meson to be happy not
-# finding all the optional deps it looks for.  Use system pkg-config pointing at a
-# directory we get to populate with any .pc files we want to add for Android
-
-# Also, include the plain DRM lib we found earlier. Panfrost relies on it rather heavily, especially when
-# interacting with the panfrost DRM module and not kbase
-
-pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=.:/tmp/drm-static/lib/pkgconfig', '/usr/bin/pkg-config']
-
-[host_machine]
-system = 'linux'
-# cpu_family = 'x86_64'
-# cpu = 'amd64'
-
-# ik this is wrong but workaround sanity check
-cpu_family = 'arm'
-cpu = 'armv7'
-
-endian = 'little'
-EOF
-
-        cat <<EOF >"android-drm-aarch64"
-[binaries]
-ar = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-c = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang', '-O3', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fPIC']
-cpp = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++', '-O3', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fPIC', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
-c_ld = 'lld'
-cpp_ld = 'lld'
-strip = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-# Android doesn't come with a pkg-config, but we need one for meson to be happy not
-# finding all the optional deps it looks for.  Use system pkg-config pointing at a
-# directory we get to populate with any .pc files we want to add for Android
-
-# Also, include the plain DRM lib we found earlier. Panfrost relies on it rather heavily, especially when
-# interacting with the panfrost DRM module and not kbase
-
-pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=.:/tmp/drm-static/lib/pkgconfig', '/usr/bin/pkg-config']
-
-[host_machine]
-system = 'linux'
-# cpu_family = 'x86_64'
-# cpu = 'amd64'
-
-# ik this is wrong but workaround sanity check
-cpu_family = 'arm'
-cpu = 'armv7'
-
-endian = 'little'
-EOF
-
-        cat <<EOF >"android-drm-arm32"
-[binaries]
-ar = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-c = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang', '-O3', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fPIC']
-cpp = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++', '-O3', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fPIC', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
-c_ld = 'lld'
-cpp_ld = 'lld'
-strip = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-# Android doesn't come with a pkg-config, but we need one for meson to be happy not
-# finding all the optional deps it looks for.  Use system pkg-config pointing at a
-# directory we get to populate with any .pc files we want to add for Android
-pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=.', '/usr/bin/pkg-config']
-
-[host_machine]
-system = 'linux'
-# cpu_family = 'x86_64'
-# cpu = 'amd64'
-
-# ik this is wrong but workaround sanity check
-cpu_family = 'arm'
-cpu = 'armv7'
-
-endian = 'little'
-EOF
-
-        cat <<EOF >"android-drm-x86_64"
-[binaries]
-ar = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-c = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang', '-O3', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fPIC']
-cpp = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang++', '-O3', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fPIC', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
-c_ld = 'lld'
-cpp_ld = 'lld'
-strip = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-# Android doesn't come with a pkg-config, but we need one for meson to be happy not
-# finding all the optional deps it looks for.  Use system pkg-config pointing at a
-# directory we get to populate with any .pc files we want to add for Android
-pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=.', '/usr/bin/pkg-config']
-
-[host_machine]
-system = 'linux'
-# cpu_family = 'x86_64'
-# cpu = 'amd64'
-
-# ik this is wrong but workaround sanity check
-cpu_family = 'arm'
-cpu = 'armv8'
-
-
-endian = 'little'
-EOF
-
-        cat <<EOF >"android-turnip-aarch64"
-[binaries]
-ar = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-c = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang']
-cpp = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
-c_ld = 'lld'
-cpp_ld = 'lld'
-strip = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-strip'
-pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=.', '/usr/bin/pkg-config']
-[host_machine]
-system = 'android'
-cpu_family = 'aarch64'
-cpu = 'armv8'
-endian = 'little'
-EOF
-
-        cat <<EOF >"android-turnip-arm32"
-[binaries]
-ar = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-c = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang']
-cpp = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
-c_ld = 'lld'
-cpp_ld = 'lld'
-strip = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi-strip'
-pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=.', '/usr/bin/pkg-config']
-[host_machine]
-system = 'android'
-cpu_family = 'arm'
-cpu = 'armv7'
-endian = 'little'
-EOF
-
-        cat <<EOF >"android-turnip-x86_64"
-[binaries]
-ar = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-c = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang']
-cpp = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang++', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
-c_ld = 'lld'
-cpp_ld = 'lld'
-strip = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android-strip'
-pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=.', '/usr/bin/pkg-config']
-[host_machine]
-system = 'android'
-cpu_family = 'x86_64'
-cpu = 'amd64'
-endian = 'little'
-EOF
-
-        cat <<EOF >"android-x86_64"
-[binaries]
-ar = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-c = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang', '-O3', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fPIC']
-cpp = ['ccache', '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang++', '-O3', '-DVK_USE_PLATFORM_ANDROID_KHR', '-fPIC', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
-c_ld = 'lld'
-cpp_ld = 'lld'
-strip = '$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-# Android doesn't come with a pkg-config, but we need one for meson to be happy not
-# finding all the optional deps it looks for.  Use system pkg-config pointing at a
-# directory we get to populate with any .pc files we want to add for Android
-
-# Also, include the plain DRM lib we found earlier. Panfrost relies on it rather heavily, especially when
-# interacting with the panfrost DRM module and not kbase
-
-pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=.:/tmp/drm-static/lib/pkgconfig', '/usr/bin/pkg-config']
-
-[host_machine]
-system = 'linux'
-# cpu_family = 'x86_64'
-# cpu = 'amd64'
-
-# ik this is wrong but workaround sanity check
-cpu_family = 'arm'
-cpu = 'armv8'
-
-
-endian = 'little'
-EOF
-
-
-	echo "Generating build files ..." $'\n'
+	echo -e "Generating build files ... \n"
 	meson setup build-android-aarch64 \
 		--cross-file android-aarch64 \
 		-Dplatforms=android \
@@ -345,84 +145,45 @@ EOF
 		-Dglx=disabled \
 		-Degl=disabled \
 		-Dgbm=disabled \
-		-Dtools=disabled \
-		-Dzlib=disabled \
+		-Dtools= \
+		-Dzlib=enabled \
 		-Dshared-llvm=disabled \
 		-Dbuildtype=release \
 		-Db_lto=true \
 		-Dprefix=/usr/local
 
-	echo "Compiling build files ..." $'\n'
+	echo -e "Compiling build files ... \n"
 	ninja -C build-android-aarch64 libvulkan_freedreno.so
 
-	echo "Using patchelf to match soname ..."  $'\n'
+	echo -e "Using patchelf to match soname ... \n"
 	cp build-android-aarch64/src/freedreno/vulkan/libvulkan_freedreno.so ./libvulkan_freedreno.so
 	patchelf --set-soname "libvulkan_freedreno.so" libvulkan_freedreno.so
-	mv libvulkan_freedreno.so turnip_workdir/
+	mv libvulkan_freedreno.so $workdir/
+}
 
-	mkdir -p "$packagedir" && cd "$_"
+port_lib_for_adrenotool() {
+	local suffix=$1
+	echo -e "Copy necessary files from work directory ... \n"
+	cp $workdir/libvulkan_freedreno.so $workdir/vulkan.ad06XX.so
 
-	date=$(date +'%b %d, %Y')
-	patched=""
-
-	if [ ! -z "$1" ]; then
-		patched="_patched"
-	fi
-
-	cat <<EOF >"meta.json"
+	echo -e "Packing files in to adrenotool package ... \n"
+	cd $workdir
+	
+	# Create meta.json with version info
+	cat > meta.json << EOF
 {
-  "schemaVersion": 1,
-  "name": "Turnip - $date - $commit_short$patched",
-  "description": "Compiled from Mesa, Commit $commit_short$patched",
-  "author": "mesa",
-  "packageVersion": "1",
-  "vendor": "Mesa",
-  "driverVersion": "$mesa_version/vk$vulkan_version",
-  "minApi": 30,
-  "libraryName": "vulkan.ad06XX.so"
+	"name": "Turnip",
+	"version": "${mesa_version}${suffix:+-$suffix}",
+	"author": "Mesa",
+	"description": "Open source Vulkan driver for Adreno GPU",
+	"vulkan_support": "$vulkan_version",
+	"devices_support": "Adreno 6xx series"
 }
 EOF
-
-	filename=Turnip_"$(date +'%b-%d-%Y')"_"$commit_short"
-	echo "Copy necessary files from work directory ..." $'\n'
-	cp "$workdir"/vulkan.ad06XX.so "$packagedir"
-
-	echo "Packing files in to adrenotool package ..." $'\n'
-	zip -9 "$workdir"/"$filename$patched".zip ./*
-
-	cd "$workdir"
 	
-	echo "Turnip - $mesa_version - $date" > release
-	echo "$mesa_version"_"$commit_short" > tag
-	echo  $filename > filename
-	echo "### Base commit : [$commit_short](https://gitlab.freedesktop.org/mesa/mesa/-/commit/$commit_short)" > description
-	echo "## Upstreams / Patches" >> description
-	
-	if (( ${#patches[@]} )); then
-		echo "These have not been merged by Mesa officially yet and may introduce bugs or" >> description
-		echo "we revert stuff that breaks games but still got merged in (see --reverse)" >> description
-		for patch in ${patches[@]}; do
-			patch_name="$(echo $patch | cut -d ";" -f 1 | xargs)"
-			patch_source="$(echo $patch | cut -d ";" -f 2 | xargs)"
-			patch_args="$(echo $patch | cut -d ";" -f 3 | xargs)"
-			echo "- $patch_name, [$patch_source](https://gitlab.freedesktop.org/mesa/mesa/-/$patch_source), $patch_args" >> description
-		done
-		echo "true" > patched
-		echo "" >> description
-		echo "_Upstreams / Patches are only applied to the patched version (\_patched.zip)_" >> description
-	else
-		echo "No patch" >> description
-		echo "false" > patched
-	fi
-	
-	echo "_If a patch is not present anymore, it's most likely because it got merged, is not needed anymore or was breaking something._" >> description
-
-        echo "## Tested On Android 11+" >> description
-
-	if ! [ -a "$workdir"/"$filename".zip ];
-		then echo -e "$red-Packing failed!$nocolor" && exit 1
-		else echo -e "$green-All done, you can take your zip from this folder;$nocolor" && echo "$workdir"/
-	fi
+	zip -u turnip${suffix:+-$suffix}.zip vulkan.ad06XX.so meta.json
+	echo -e "${green}-All done, you can take your zip from this folder;${nocolor}"
+	echo "$workdir/"
 }
 
 run_all
