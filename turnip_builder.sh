@@ -66,9 +66,31 @@ check_deps(){
 	echo "Installing python Mako dependency (if missing) ..." $'\n'
 	pip install mako &> /dev/null
 
+	# Install build dependencies
+	sudo apt-get update
+	sudo apt-get install -y \
+		libdrm-dev \
+		libzstd-dev \
+		libvulkan-dev \
+		libx11-dev \
+		libxcb-dri3-dev \
+		libxcb-present-dev \
+		libpciaccess-dev \
+		libxext-dev \
+		libxfixes-dev \
+		libxshmfence-dev \
+		libxxf86vm-dev \
+		libwayland-dev \
+		libxrandr-dev \
+		libwayland-egl-backend-dev \
+		python3-mako \
+		python3-pip \
+		meson \
+		ninja-build
+
 	# Install Python dependencies
-	python -m pip install --upgrade pip
-	pip install meson mako PyYAML
+	python3 -m pip install --upgrade pip
+	pip3 install meson mako PyYAML
 }
 
 prepare_workdir(){
