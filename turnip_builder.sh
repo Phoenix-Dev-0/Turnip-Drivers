@@ -333,29 +333,32 @@ EOF
 
 
 	echo "Generating build files ..." $'\n'
-	meson build-android-aarch64 --prefix=/tmp/mesa --cross-file "$workdir"/mesa/android-aarch64 -Dbuildtype=release -Dplatforms=android -Dplatform-sdk-version=$sdkver -Dandroid-stub=true -Dgallium-drivers= -Dvulkan-drivers=freedreno -Dvulkan-beta=true -Dfreedreno-kmds=kgsl -Db_lto=true &> "$workdir"/meson_log
+	meson setup build-android-aarch64 \
+		--cross-file android-aarch64 \
+		-Dplatforms=android \
+		-Ddri-drivers= \
+		-Dgallium-drivers= \
+		-Dvulkan-drivers=freedreno \
+		-Dandroid-stub=true \
+		-Dllvm=disabled \
+		-Dxlib-lease=disabled \
+		-Dglx=disabled \
+		-Degl=disabled \
+		-Dgbm=disabled \
+		-Dtools=disabled \
+		-Dzlib=disabled \
+		-Dshared-llvm=disabled \
+		-Dbuildtype=release \
+		-Db_lto=true \
+		-Dprefix=/usr/local
 
 	echo "Compiling build files ..." $'\n'
-	ninja -C build-android-aarch64 &> "$workdir"/ninja_log
+	ninja -C build-android-aarch64 libvulkan_freedreno.so
 
-        echo "Generating build files ..." $'\n'
-	meson build-android-aarch64 --cross-file "$workdir"/mesa/android-aarch64 -Dbuildtype=release -Dplatforms=android -Dplatform-sdk-version=$sdkver -Dandroid-stub=true -Dgallium-drivers= -Dvulkan-drivers=freedreno -Dvulkan-beta=true -Dfreedreno-kmds=kgsl -Db_lto=true &> "$workdir"/meson_log
-
-	echo "Compiling build files ..." $'\n'
-	ninja -C build-android-aarch64 &> "$workdir"/ninja_log
-
-}
-
-port_lib_for_adrenotool(){
 	echo "Using patchelf to match soname ..."  $'\n'
-	cp "$workdir"/mesa/build-android-aarch64/src/freedreno/vulkan/libvulkan_freedreno.so "$workdir"
-	cd "$workdir"
-	patchelf --set-soname vulkan.adreno.so libvulkan_freedreno.so
-	mv libvulkan_freedreno.so vulkan.ad06XX.so
-
-	if ! [ -a vulkan.ad06XX.so ]; then
-		echo -e "$red Build failed! $nocolor" && exit 1
-	fi
+	cp build-android-aarch64/src/freedreno/vulkan/libvulkan_freedreno.so ./libvulkan_freedreno.so
+	patchelf --set-soname "libvulkan_freedreno.so" libvulkan_freedreno.so
+	mv libvulkan_freedreno.so turnip_workdir/
 
 	mkdir -p "$packagedir" && cd "$_"
 
