@@ -133,10 +133,8 @@ endian = 'little'
 EOF
 
 	echo -e "Generating build files ... \n"
-	meson setup build-android-aarch64 \
-		--cross-file android-aarch64 \
+	meson build-android-aarch64 \
 		-Dplatforms=android \
-		-Ddri-drivers= \
 		-Dgallium-drivers= \
 		-Dvulkan-drivers=freedreno \
 		-Dandroid-stub=true \
@@ -150,7 +148,8 @@ EOF
 		-Dshared-llvm=disabled \
 		-Dbuildtype=release \
 		-Db_lto=true \
-		-Dprefix=/usr/local
+		-Dprefix=/usr/local \
+		--cross-file=android-aarch64
 
 	echo -e "Compiling build files ... \n"
 	ninja -C build-android-aarch64 libvulkan_freedreno.so
